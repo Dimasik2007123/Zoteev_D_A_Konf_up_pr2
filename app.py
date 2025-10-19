@@ -133,6 +133,41 @@ def get_dependency_load_order(graph, start_node):
     except Exception as e:
         print(f"Error computing load order: {e}")
         return None
+    
+def generate_mermaid_representation(graph):
+    mermaid = "graph TD\n"
+    for node in graph.nodes:
+        mermaid += f"    {node.replace(':', '_')}[{node}]\n"
+    for edge in graph.edges:
+        mermaid += f"    {edge[0].replace(':', '_')} --> {edge[1].replace(':', '_')}\n"
+    print("Mermaid representation of the graph:")
+    print(mermaid)
+    return mermaid
+
+def visualize_graph(graph, output_file):
+    try:
+        plt.figure(figsize=(8, 6))
+        pos = nx.spring_layout(graph)
+        nx.draw(graph, pos, with_labels=True, node_color='lightblue', node_size=500, font_size=10, arrows=True)
+        if not output_file.endswith('.png'):
+            output_file += '.png'
+        plt.savefig(output_file, format='png', bbox_inches='tight')
+        plt.close()
+        print(f"Graph saved to {output_file}")
+    except Exception as e:
+        print(f"Error visualizing graph: {e}")
+
+def generate_ascii_art(graph):
+    print("ASCII representation of the graph:")
+    for node in graph.nodes:
+        children = list(graph.successors(node))
+        if children:
+            print(f"{node}:")
+            for child in children:
+                print(f"  -> {child}")
+        else:
+            print(f"{node}: (no dependencies)")
+    
 def main():
     if len(sys.argv) != 2:
         print("Usage: python app.py config.xml")
@@ -176,6 +211,10 @@ def main():
         print("Graph edges:", list(graph.edges))
         detect_cycles(graph)
         get_dependency_load_order(graph, start_node)
+        generate_mermaid_representation(graph)
+        visualize_graph(graph, output_file)
+        if ascii_mode == 'on':
+            generate_ascii_art(graph)
         
 
     except FileNotFoundError:
