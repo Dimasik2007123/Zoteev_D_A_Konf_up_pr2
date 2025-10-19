@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from urllib.request import urlopen
 from urllib.error import HTTPError, URLError
 import networkx as nx
+import matplotlib.pyplot as plt
 
 def get_direct_dependencies(group, artifact, version, repo_url):
     group_path = group.replace('.', '/')
@@ -65,29 +66,30 @@ def recursive_bfs(graph, current_level, visited, depth, max_depth, repo_url, tes
         return
     next_level = []
     for node in current_level:
-        if test_mode == 'on':
-            for child in graph.successors(node):
-                if child not in visited:
-                    next_level.append(child)
-        else:
-            parts = node.split(':')
-            if len(parts) != 3:
-                print(f"Warning: Invalid node format {node}")
-                continue
-            group, artifact, version = parts
-            deps = get_direct_dependencies(group, artifact, version, repo_url)
-            for dep in deps:
-                graph.add_node(dep)
-                graph.add_edge(node, dep)
-                if dep not in visited:
-                    next_level.append(dep)
-        visited.add(node)  # Добавляем узел в visited после обработки
+        if node not in visited:  # Проверяем, не посещён ли узел
+            if test_mode == 'on':
+                for child in graph.successors(node):
+                    if child not in visited:
+                        next_level.append(child)
+            else:
+                parts = node.split(':')
+                if len(parts) != 3:
+                    print(f"Warning: Invalid node format {node}")
+                    continue
+                group, artifact, version = parts
+                deps = get_direct_dependencies(group, artifact, version, repo_url)
+                for dep in deps:
+                    graph.add_node(dep)
+                    graph.add_edge(node, dep)
+                    if dep not in visited:
+                        next_level.append(dep)
+            visited.add(node)  # Добавляем узел в visited после обработки
     recursive_bfs(graph, next_level, visited, depth + 1, max_depth, repo_url, test_mode)
 
 def build_graph(start_node, max_depth, repo_url, test_mode, test_file=None):
     graph = nx.DiGraph()
     graph.add_node(start_node)
-    visited = set()  # Инициализируем visited пустым
+    visited = set()
     if test_mode == 'on' and test_file:
         graph = parse_test_repo(test_file)
     recursive_bfs(graph, [start_node], visited, 1, max_depth, repo_url, test_mode)
@@ -108,6 +110,29 @@ def detect_cycles(graph):
         print(f"Error detecting cycles: {e}")
         return False
 
+def get_dependency_load_order(graph, start_node):
+    try:
+        # Проверяем наличие цикла
+        cycles = list(nx.simple_cycles(graph))
+        if cycles:
+            print("Cannot compute load order due to cycles in the graph:")
+            for i, cycle in enumerate(cycles, 1):
+                print(f"Cycle {i}: {' -> '.join(cycle)} -> ...")
+            return None
+        
+        # Выполняем топологическую сортировку
+        topological_order = list(nx.topological_sort(graph))
+        
+        # Для порядка загрузки зависимостей нужен обратный порядок:
+        # сначала загружаются узлы без зависимостей (листья), затем те, что от них зависят
+        load_order = list(reversed(topological_order))
+        
+        print(f"Dependency load order for {start_node}:")
+        print(" -> ".join(load_order))
+        return load_order
+    except Exception as e:
+        print(f"Error computing load order: {e}")
+        return None
 def main():
     if len(sys.argv) != 2:
         print("Usage: python app.py config.xml")
@@ -150,6 +175,8 @@ def main():
         print("Graph nodes:", list(graph.nodes))
         print("Graph edges:", list(graph.edges))
         detect_cycles(graph)
+        get_dependency_load_order(graph, start_node)
+        
 
     except FileNotFoundError:
         print("Error: Config file not found.")
