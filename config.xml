@@ -1,0 +1,9 @@
+<config>
+    <package_name>com.google.guava:guava</package_name>
+    <repo_url>https://repo1.maven.org/maven2/</repo_url>
+    <test_mode>off</test_mode>
+    <package_version>33.0.0-jre</package_version>
+    <output_file>graph.png</output_file>
+    <ascii_mode>on</ascii_mode>
+    <max_depth>3</max_depth>
+</config>
