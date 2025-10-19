@@ -1,0 +1,9 @@
+<config>
+    <package_name>A</package_name>
+    <repo_url>test1.txt</repo_url>
+    <test_mode>on</test_mode>
+    <package_version>33.0.0-jre</package_version>
+    <output_file>graph.png</output_file>
+    <ascii_mode>on</ascii_mode>
+    <max_depth>3</max_depth>
+</config>

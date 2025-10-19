@@ -2,6 +2,7 @@ import sys
 import xml.etree.ElementTree as ET
 from urllib.request import urlopen
 from urllib.error import HTTPError, URLError
+import networkx as nx
 
 def get_direct_dependencies(group, artifact, version, repo_url):
     group_path = group.replace('.', '/')
@@ -41,6 +42,71 @@ def get_direct_dependencies(group, artifact, version, repo_url):
     except AttributeError as e:
         print(f"Error: Unexpected structure in POM: {e}")
         sys.exit(1)
+        
+def parse_test_repo(file_path):
+    graph = nx.DiGraph()
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                if ':' in line:
+                    pkg, deps = line.strip().split(':')
+                    pkg = pkg.strip()
+                    graph.add_node(pkg)
+                    for dep in deps.split():
+                        graph.add_node(dep)
+                        graph.add_edge(pkg, dep)  # край от pkg к dep (зависит от)
+        return graph
+    except FileNotFoundError:
+        print("Error: Test repo file not found.")
+        sys.exit(1)
+        
+def recursive_bfs(graph, current_level, visited, depth, max_depth, repo_url, test_mode):
+    if depth > max_depth or not current_level:
+        return
+    next_level = []
+    for node in current_level:
+        if test_mode == 'on':
+            for child in graph.successors(node):
+                if child not in visited:
+                    next_level.append(child)
+        else:
+            parts = node.split(':')
+            if len(parts) != 3:
+                print(f"Warning: Invalid node format {node}")
+                continue
+            group, artifact, version = parts
+            deps = get_direct_dependencies(group, artifact, version, repo_url)
+            for dep in deps:
+                graph.add_node(dep)
+                graph.add_edge(node, dep)
+                if dep not in visited:
+                    next_level.append(dep)
+        visited.add(node)  # Добавляем узел в visited после обработки
+    recursive_bfs(graph, next_level, visited, depth + 1, max_depth, repo_url, test_mode)
+
+def build_graph(start_node, max_depth, repo_url, test_mode, test_file=None):
+    graph = nx.DiGraph()
+    graph.add_node(start_node)
+    visited = set()  # Инициализируем visited пустым
+    if test_mode == 'on' and test_file:
+        graph = parse_test_repo(test_file)
+    recursive_bfs(graph, [start_node], visited, 1, max_depth, repo_url, test_mode)
+    return graph
+
+def detect_cycles(graph):
+    try:
+        cycles = list(nx.simple_cycles(graph))
+        if cycles:
+            print("Cycles detected in graph:")
+            for i, cycle in enumerate(cycles, 1):
+                print(f"Cycle {i}: {' -> '.join(cycle)} -> ...")
+            return True
+        else:
+            print("No cycles detected in graph.")
+            return False
+    except Exception as e:
+        print(f"Error detecting cycles: {e}")
+        return False
 
 def main():
     if len(sys.argv) != 2:
@@ -77,6 +143,13 @@ def main():
                 print(dep)
         else:
             print("Test mode on, skipping real dependencies fetch for this stage.")
+            
+        start_node = f"{package_name}:{package_version}" if test_mode == 'off' else package_name
+        test_file = repo_url if test_mode == 'on' else None
+        graph = build_graph(start_node, max_depth, repo_url, test_mode, test_file)
+        print("Graph nodes:", list(graph.nodes))
+        print("Graph edges:", list(graph.edges))
+        detect_cycles(graph)
 
     except FileNotFoundError:
         print("Error: Config file not found.")
